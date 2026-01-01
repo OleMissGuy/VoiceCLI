@@ -84,9 +84,11 @@ inline CommandLine::CommandLine(int argc, char* argv[]) {
       break;
     case 'M':
       try {
-        m_config.maxRecordTime = std::stoul(optarg);
+        unsigned int val = std::stoul(optarg);
+        if (val == 0) throw std::invalid_argument("must be > 0");
+        m_config.maxRecordTime = val;
       } catch (...) {
-        std::cerr << "Invalid max record time. Using default 5 minutes." << std::endl;
+        std::cerr << "Invalid max record time (must be integer > 0). Using default 5 minutes." << std::endl;
       }
       break;
     case 'r':
@@ -104,14 +106,18 @@ inline CommandLine::CommandLine(int argc, char* argv[]) {
       break;
     case 'S':
       try {
-        m_config.vadThreshold = std::stof(optarg);
+        float val = std::stof(optarg);
+        if (val < 0.0f || val > 1.0f) throw std::invalid_argument("out of range");
+        m_config.vadThreshold = val;
       } catch (...) {
-        std::cerr << "Invalid VAD threshold provided. Using default 0.05." << std::endl;
+        std::cerr << "Invalid VAD threshold (must be 0.0-1.0). Using default 0.05." << std::endl;
       }
       break;
     case 'T':
       try {
-        m_config.vadTimeoutMs = std::stoul(optarg);
+        unsigned int val = std::stoul(optarg);
+        if (val < 100) std::cerr << "Warning: VAD timeout " << val << "ms is very short." << std::endl;
+        m_config.vadTimeoutMs = val;
       } catch (...) {
         std::cerr << "Invalid VAD timeout provided. Using default 2000ms." << std::endl;
       }

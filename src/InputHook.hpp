@@ -7,6 +7,8 @@
 #include <iostream>
 #include <thread>
 #include <vector>
+#include <algorithm>
+#include <cctype>
 
 #include "Logger.hpp"
 
@@ -47,18 +49,24 @@ inline InputHook::~InputHook() {
 inline bool InputHook::monitor(const std::string& keyName, bool verbose) {
   m_running = true;
   
+  std::string lowerKey = keyName;
+  std::transform(lowerKey.begin(), lowerKey.end(), lowerKey.begin(),
+      [](unsigned char c){ return std::tolower(c); });
+  
   KeySym symL = XK_Shift_L;
   KeySym symR = XK_Shift_R;
 
-  if (keyName == "Control") {
+  if (lowerKey == "control") {
       symL = XK_Control_L;
       symR = XK_Control_R;
-  } else if (keyName == "Alt") {
+  } else if (lowerKey == "alt") {
       symL = XK_Alt_L;
       symR = XK_Alt_R;
-  } else if (keyName == "Super") {
+  } else if (lowerKey == "super") {
       symL = XK_Super_L;
       symR = XK_Super_R;
+  } else if (lowerKey != "shift") {
+      std::cerr << "Warning: Unknown trigger key '" << keyName << "'. Defaulting to Shift." << std::endl;
   }
 
   KeyCode codeL = XKeysymToKeycode(m_display, symL);
