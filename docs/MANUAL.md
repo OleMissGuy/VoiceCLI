@@ -51,7 +51,7 @@ VoiceCLI operates on a simple **"trigger, speak, paste"** model, seamlessly inte
     ./debug/VoiceCLI &
     ```
 
-2.  **Trigger Recording:** When you're ready to speak, use the configured hotkey (default: **double-tap `Shift`**).
+2.  **Trigger Recording:** When you're ready to speak, **place the cursor where you want the transcribed text to appear**, and then trigger voice recognition using the configured hotkey (default: **double-tap `Shift`**).
     *   The `StatusWindow` will appear, indicating that recording has started.
 
 3.  **Speak Naturally:** Begin speaking your text or commands.
