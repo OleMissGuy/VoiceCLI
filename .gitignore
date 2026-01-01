@@ -1,0 +1,24 @@
+# Build Directories
+debug/
+release/
+VoiceCLI
+main
+
+# Object files
+*.o
+*.obj
+
+# VS Code
+.vscode/ipch/
+.vscode/msvc.cache
+.vscode/browse.VC.db
+
+# Models (Large binaries)
+models/*.bin
+
+# Logs and Temp files
+voicecli.log
+*.wav
+
+# Third Party Build Artifacts
+third_party/whisper.cpp/build/

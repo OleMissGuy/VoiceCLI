@@ -1,0 +1,10 @@
+{
+    "editor.tabSize": 2,
+    "editor.insertSpaces": true,
+    "editor.formatOnSave": true,
+    "C_Cpp.clang_format_style": "file",
+    "files.associations": {
+        "*.tcc": "cpp",
+        "*.cpp": "cpp"
+    }
+}
