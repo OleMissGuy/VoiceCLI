@@ -20,7 +20,7 @@ public:
   InputHook& operator=(const InputHook&) = delete;
 
   // Blocks and monitors input until a trigger is detected. Returns true if triggered.
-  bool monitor(bool verbose = false);
+  bool monitor(const std::string& keyName, bool verbose = false);
 
 private:
   Display* m_display;
@@ -44,26 +44,42 @@ inline InputHook::~InputHook() {
   }
 }
 
-inline bool InputHook::monitor(bool verbose) {
+inline bool InputHook::monitor(const std::string& keyName, bool verbose) {
   m_running = true;
+  
+  KeySym symL = XK_Shift_L;
+  KeySym symR = XK_Shift_R;
+
+  if (keyName == "Control") {
+      symL = XK_Control_L;
+      symR = XK_Control_R;
+  } else if (keyName == "Alt") {
+      symL = XK_Alt_L;
+      symR = XK_Alt_R;
+  } else if (keyName == "Super") {
+      symL = XK_Super_L;
+      symR = XK_Super_R;
+  }
+
+  KeyCode codeL = XKeysymToKeycode(m_display, symL);
+  KeyCode codeR = XKeysymToKeycode(m_display, symR);
+
   if (verbose) {
-    std::cout << "InputHook: Monitoring for Shift double-tap (Left or Right)..." << std::endl;
+    std::cout << "InputHook: Monitoring for " << keyName << " double-tap (Left or Right)..." << std::endl;
   }
 
   int state = 0;
   auto lastTime = std::chrono::steady_clock::now();
   const auto timeout = std::chrono::milliseconds(400);
 
-  KeyCode shiftL = XKeysymToKeycode(m_display, XK_Shift_L);
-  KeyCode shiftR = XKeysymToKeycode(m_display, XK_Shift_R);
   KeyCode triggeringKey = 0;
   char keyMap[32];
 
   while (m_running) {
     XQueryKeymap(m_display, keyMap);
 
-    bool isLPressed = (keyMap[shiftL / 8] & (1 << (shiftL % 8)));
-    bool isRPressed = (keyMap[shiftR / 8] & (1 << (shiftR % 8)));
+    bool isLPressed = (keyMap[codeL / 8] & (1 << (codeL % 8)));
+    bool isRPressed = (keyMap[codeR / 8] & (1 << (codeR % 8)));
     
     auto now = std::chrono::steady_clock::now();
 
@@ -71,10 +87,10 @@ inline bool InputHook::monitor(bool verbose) {
     case 0: // Idle
       if (isLPressed) {
         state = 1;
-        triggeringKey = shiftL;
+        triggeringKey = codeL;
       } else if (isRPressed) {
         state = 1;
-        triggeringKey = shiftR;
+        triggeringKey = codeR;
       }
       break;
 
@@ -101,9 +117,9 @@ inline bool InputHook::monitor(bool verbose) {
 
     case 3: // Triggered
       if (verbose) {
-        std::cout << "TRIGGER DETECTED!" << std::endl;
+        std::cout << "TRIGGER DETECTED (" << keyName << ")!" << std::endl;
       }
-      Logger::instance().log("InputHook: Shift double-tap trigger detected.");
+      Logger::instance().log(std::format("InputHook: {} double-tap trigger detected.", keyName));
       
       // Wait for release
       while (true) {

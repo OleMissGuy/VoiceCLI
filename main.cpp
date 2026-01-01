@@ -21,17 +21,29 @@ std::string trim(const std::string& s) {
   return s.substr(start, end - start + 1);
 }
 
-// Helper to find the default device
-std::optional<AudioDevice> getDefaultDevice(AudioConfig& audio) {
+// Helper to find the desired or default device
+std::optional<AudioDevice> getSelectedDevice(AudioConfig& audio, std::optional<unsigned int> userIndex) {
   auto devices = audio.listCaptureDevices();
+  
+  if (userIndex) {
+    for (const auto& dev : devices) {
+      if (dev.index == *userIndex) return dev;
+    }
+    std::cerr << "Warning: Requested device index " << *userIndex << " not found. Falling back to default." << std::endl;
+  }
+
+  // Strict preference for System Default
   for (const auto& dev : devices) {
     if (dev.isDefault) {
       return dev;
     }
   }
+
+  // Fallback if no default marked (rare)
   if (!devices.empty()) {
-    return devices[0]; // Fallback to first if no default marked
+    return devices[0];
   }
+
   return std::nullopt;
 }
 
@@ -70,18 +82,55 @@ int main(int argc, char* argv[]) {
         std::cout << "No capture devices found." << std::endl;
       } else {
         for (const auto& dev : devices) {
-          std::cout << std::format("[{}{}] {}", dev.index, dev.isDefault ? "*" : "", dev.name) << std::endl;
+           std::string fmtStr;
+           for(auto f : dev.supportedFormats) {
+               switch(f) {
+                   case ma_format_u8: fmtStr += "u8 "; break;
+                   case ma_format_s16: fmtStr += "s16 "; break;
+                   case ma_format_s24: fmtStr += "s24 "; break;
+                   case ma_format_s32: fmtStr += "s32 "; break;
+                   case ma_format_f32: fmtStr += "f32 "; break;
+                   case ma_format_unknown: fmtStr += "Any "; break;
+                   default: break;
+               }
+           }
+           std::string chanStr;
+           for(auto c : dev.supportedChannels) {
+               if(c == 0) chanStr += "Any ";
+               else chanStr += std::to_string(c) + " ";
+           }
+           
+           std::cout << std::format("[{}{}] {} (Channels: [{}], Formats: [{}])", 
+               dev.index, dev.isDefault ? "*" : "", dev.name, chanStr, fmtStr) << std::endl;
         }
       }
       return 0;
     }
 
     // Determine which device we WILL use
-    auto selectedDevice = getDefaultDevice(audio);
+    auto selectedDevice = getSelectedDevice(audio, config.deviceIndex);
 
     if (config.verbose) {
       if (selectedDevice) {
-        std::string msg = std::format("Selected Input Device: [{}] {}", selectedDevice->index, selectedDevice->name);
+        std::string chanStr;
+        for(auto c : selectedDevice->supportedChannels) {
+            if(c == 0) chanStr += "Any ";
+            else chanStr += std::to_string(c) + " ";
+        }
+        std::string fmtStr;
+        for(auto f : selectedDevice->supportedFormats) {
+             switch(f) {
+                 case ma_format_u8: fmtStr += "u8 "; break;
+                 case ma_format_s16: fmtStr += "s16 "; break;
+                 case ma_format_s24: fmtStr += "s24 "; break;
+                 case ma_format_s32: fmtStr += "s32 "; break;
+                 case ma_format_f32: fmtStr += "f32 "; break;
+                 case ma_format_unknown: fmtStr += "Any "; break;
+                 default: break;
+             }
+         }
+        std::string msg = std::format("Selected Input Device: [{}] {} (Supported Channels: [{}], Formats: [{}])", 
+            selectedDevice->index, selectedDevice->name, chanStr, fmtStr);
         std::cout << msg << std::endl;
         Logger::instance().log(msg);
       } else {
@@ -99,24 +148,28 @@ int main(int argc, char* argv[]) {
       std::string outFile = "/tmp/voicecli_test.wav";
       std::string modelPath = config.modelPath;
 
-      std::cout << "Starting 5-second test recording to " << outFile << "..." << std::endl;
+      if (config.verbose) {
+        std::cout << "Starting 5-second test recording to " << outFile << "..." << std::endl;
+      }
       Logger::instance().log("Starting test recording...");
 
       StatusWindow win;
       win.show("Initializing Recorder...");
 
-      Recorder rec(selectedDevice->index, config.sampleRate);
+      Recorder rec(audio.getCaptureDeviceID(selectedDevice->index), config.sampleRate);
       rec.start(outFile);
 
       for (int i = 50; i > 0; --i) {
         float timeRemaining = i * 0.1f;
-        win.updateText(std::format("Recording... {:.1f}s", timeRemaining));
+        win.updateText(std::format("Recording... {:.1f}s", timeRemaining), rec.getCurrentLevel());
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
 
       rec.stop();
       win.updateText("Transcribing...");
-      std::cout << "Recording complete. Transcribing..." << std::endl;
+      if (config.verbose) {
+        std::cout << "Recording complete. Transcribing..." << std::endl;
+      }
 
       // Transcribe
       try {
@@ -126,16 +179,18 @@ int main(int argc, char* argv[]) {
         win.updateText("Done!");
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
-        std::cout << "---------------------------------------------------" << std::endl;
-        std::cout << "Transcription Result:" << std::endl;
-        std::cout << text << std::endl;
-        std::cout << "---------------------------------------------------" << std::endl;
+        if (config.verbose) {
+            std::cout << "---------------------------------------------------" << std::endl;
+            std::cout << "Transcription Result:" << std::endl;
+            std::cout << text << std::endl;
+            std::cout << "---------------------------------------------------" << std::endl;
+        }
 
         Logger::instance().log("Transcription: " + text);
 
       } catch (const std::exception& e) {
         std::string err = std::format("Transcription Failed: {}", e.what());
-        std::cerr << err << std::endl;
+        if (config.verbose) std::cerr << err << std::endl;
         Logger::instance().error(err);
       }
 
@@ -155,7 +210,7 @@ int main(int argc, char* argv[]) {
 
     bool shouldExit = false;
     while (!shouldExit) {
-      if (!input.monitor(config.verbose)) {
+      if (!input.monitor(config.triggerKey, config.verbose)) {
         break; // Stop if monitor fails
       }
 
@@ -168,7 +223,7 @@ int main(int argc, char* argv[]) {
       win.show("Starting Recording...");
 
       std::string tempFile = "/tmp/voicecli_rec.wav";
-      Recorder rec(selectedDevice->index, config.sampleRate);
+      Recorder rec(audio.getCaptureDeviceID(selectedDevice->index), config.sampleRate);
 
       try {
         rec.start(tempFile);
@@ -179,6 +234,8 @@ int main(int argc, char* argv[]) {
 
       auto startTime = std::chrono::steady_clock::now();
       auto maxDuration = std::chrono::minutes(config.maxRecordTime);
+      auto lastSpeechTime = std::chrono::steady_clock::now();
+      bool isAutoPaused = false;
       bool finishAndTranscribe = false;
       bool appendSpace = true;
       bool useTerminalPaste = false;
@@ -187,15 +244,38 @@ int main(int argc, char* argv[]) {
       bool isTimeout = false;
       std::chrono::steady_clock::duration totalPausedDuration = std::chrono::seconds(0);
       auto lastPauseStart = std::chrono::steady_clock::now();
+      
+      std::chrono::steady_clock::duration totalAutoPausedDuration = std::chrono::seconds(0);
+      auto lastAutoPauseStart = std::chrono::steady_clock::now();
 
       // Recording Loop
       while (true) {
         auto now = std::chrono::steady_clock::now();
 
+        // VAD Logic (Smart Pause)
+        float currentLevel = rec.getCurrentLevel();
+        if (currentLevel > config.vadThreshold) {
+             lastSpeechTime = now;
+             if (isAutoPaused) {
+                 isAutoPaused = false;
+                 rec.setWriting(true);
+                 totalAutoPausedDuration += (now - lastAutoPauseStart);
+                 Logger::instance().log("VAD: Voice detected. Resuming.");
+             }
+        }
+        
+        if (!isPaused && !isTimeout && !isAutoPaused && (now - lastSpeechTime > std::chrono::milliseconds(config.vadTimeoutMs))) {
+             isAutoPaused = true;
+             rec.setWriting(false);
+             lastAutoPauseStart = now;
+             Logger::instance().log("VAD: Silence detected. Auto-pausing.");
+        }
+
         // Calculate active recording duration
         auto totalSinceStart = now - startTime;
         auto currentPauseSession = isPaused ? (now - lastPauseStart) : std::chrono::seconds(0);
-        auto activePaused = totalPausedDuration + currentPauseSession;
+        auto currentAutoPauseSession = isAutoPaused ? (now - lastAutoPauseStart) : std::chrono::seconds(0);
+        auto activePaused = totalPausedDuration + currentPauseSession + totalAutoPausedDuration + currentAutoPauseSession;
         auto elapsed = totalSinceStart - activePaused;
 
         auto remaining = maxDuration - elapsed;
@@ -214,7 +294,7 @@ int main(int argc, char* argv[]) {
         // Background Color Logic
         if (isTimeout) {
           win.setBackgroundColor("red");
-        } else if (isPaused) {
+        } else if (isPaused || isAutoPaused) {
           win.setBackgroundColor("white");
         } else {
           if (secondsLeft < 30) {
@@ -226,238 +306,86 @@ int main(int argc, char* argv[]) {
           }
         }
 
-                // UI Text Logic
-
-                int minutes = secondsLeft / 60;
-
-                int seconds = secondsLeft % 60;
-
-                std::string header;
-
-                if (isTimeout) header = "TIME LIMIT REACHED!";
-
-                else if (isPaused) header = std::format("PAUSED - {:02d}:{:02d} remaining", minutes, seconds);
-
-                else header = std::format("RECORDING... {:02d}:{:02d} remaining", minutes, seconds);
-
-        
-
-                                std::string status = std::format(
-
-        
-
-                                    "{}\n"
-
-        
-
-                                    "----------------------------------\n"
-
-        
-
-                                    "Commands:\n"
-
-        
-
-                                    "  v    Paste + Space\n"
-
-        
-
-                                    "  s    Paste Only\n"
-
-        
-
-                                    "  t    Terminal Paste\n"
-
-        
-
-                                    "  r    Restart Session\n"
-
-        
-
-                                    "  p    Pause / Resume\n"
-
-        
-
-                                    "  +    Extend Time {} min\n"
-
-        
-
-                                    "  a    Abort Transcribing\n"
-
-        
-
-                                    "  x    Exit Program",
-
-        
-
-                                    header, config.maxRecordTime);
-
-        
-
-                        
-
-        
-
-                        win.updateText(status);
-
-        
-
-                
-
-        
-
-                        // Check Input
-
-        
-
-                        char key = 0;
-
-        
-
-                        if (win.checkForInput(key)) {
-
-        
-
-                          if (key == '+') {
-
-        
-
-                            maxDuration += std::chrono::minutes(config.maxRecordTime);
-
-        
-
-                            if (isTimeout) {
-
-        
-
-                              isTimeout = false;
-
-        
-
-                              totalPausedDuration += (now - lastPauseStart);
-
-        
-
-                              isPaused = false;
-
-        
-
-                              rec.resume();
-
-        
-
-                            }
-
-        
-
-                          } else if (key == 'p') {
-
-        
-
-                            if (isTimeout) {
-
-        
-
-                            } else if (isPaused) {
-
-        
-
-                              totalPausedDuration += (now - lastPauseStart);
-
-        
-
-                              isPaused = false;
-
-        
-
-                              rec.resume();
-
-        
-
-                            } else {
-
-        
-
-                              lastPauseStart = now;
-
-        
-
-                              isPaused = true;
-
-        
-
-                              rec.pause();
-
-        
-
-                            }
-
-        
-
-                          } else if (key == 'r') {
-
-        
-
-                            // Restart
-
-        
-
-                            rec.stop();
-
-        
-
-                            rec.start(tempFile);
-
-        
-
-                            startTime = std::chrono::steady_clock::now();
-
-        
-
-                            maxDuration = std::chrono::minutes(config.maxRecordTime);
-
-        
-
-                            totalPausedDuration = std::chrono::seconds(0);
-
-        
-
-                            isPaused = false;
-
-        
-
-                            isTimeout = false;
-
-        
-
-                            Logger::instance().log("Recording session restarted by user.");
-
-        
-
-                          } else if (key == 'v' || key == 's' || key == 't') {
-
-        
-
-                            finishAndTranscribe = true;
-
-        
-
-                            appendSpace = (key == 'v' || key == 't');
-
-        
-
-                            useTerminalPaste = (key == 't');
-
-        
-
-                            break;
-
-        
-
-                          } else if (key == 'a') {
+        // UI Text Logic
+        int minutes = secondsLeft / 60;
+        int seconds = secondsLeft % 60;
+        std::string header;
+
+        if (isTimeout) {
+          header = "TIME LIMIT REACHED!";
+        } else if (isPaused) {
+          header = std::format("PAUSED - {:02d}:{:02d} remaining", minutes, seconds);
+        } else if (isAutoPaused) {
+          header = std::format("LISTENING... (Paused) {:02d}:{:02d}", minutes, seconds);
+        } else {
+          header = std::format("RECORDING... {:02d}:{:02d} remaining", minutes, seconds);
+        }
+
+        std::string status = std::format(
+            "{}\n"
+            "----------------------------------\n"
+            "Commands:\n"
+            "  v    Paste + Space\n"
+            "  s    Paste Only\n"
+            "  t    Terminal Paste\n"
+            "  r    Restart Session\n"
+            "  p    Pause / Resume\n"
+            "  +    Extend Time {} min\n"
+            "  a    Abort Transcribing\n"
+            "  x    Exit Program",
+            header, config.maxRecordTime);
+
+        win.updateText(status, rec.getCurrentLevel());
+
+        // Check Input
+        char key = 0;
+        if (win.checkForInput(key)) {
+          if (key == '+') {
+            maxDuration += std::chrono::minutes(config.maxRecordTime);
+            if (isTimeout) {
+              isTimeout = false;
+              totalPausedDuration += (now - lastPauseStart);
+              isPaused = false;
+              rec.resume();
+              lastSpeechTime = now;
+            }
+          } else if (key == 'p') {
+            if (isTimeout) {
+            } else if (isPaused) {
+              totalPausedDuration += (now - lastPauseStart);
+              isPaused = false;
+              rec.resume();
+              rec.setWriting(true);
+              lastSpeechTime = now;
+            } else {
+              if (isAutoPaused) {
+                  isAutoPaused = false;
+                  totalAutoPausedDuration += (now - lastAutoPauseStart);
+              }
+              lastPauseStart = now;
+              isPaused = true;
+              rec.pause();
+            }
+          } else if (key == 'r') {
+            // Restart
+            rec.stop();
+            rec.start(tempFile);
+            startTime = std::chrono::steady_clock::now();
+            maxDuration = std::chrono::minutes(config.maxRecordTime);
+            totalPausedDuration = std::chrono::seconds(0);
+            isPaused = false;
+            isTimeout = false;
+            lastSpeechTime = now;
+            Logger::instance().log("Recording session restarted by user.");
+          } else if (key == 'v' || key == 's' || key == 't') {
+            finishAndTranscribe = true;
+            appendSpace = (key == 'v' || key == 't');
+            useTerminalPaste = (key == 't');
+            break;
+          } else if (key == 'a' || key == 27) { // 'a' or Esc
             Logger::instance().log("Recording aborted by user.");
             break;
-          } else if (key == 'x') {
+          } else if (key == 'x' || key == 3) { // 'x' or Ctrl+C
             Logger::instance().log("Exit requested by user via recording window.");
             shouldExit = true;
             break;

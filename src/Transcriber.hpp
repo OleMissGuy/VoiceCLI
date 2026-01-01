@@ -8,6 +8,7 @@
 #include <format>
 
 #include "whisper.h"
+#include "Logger.hpp"
 #include "../third_party/miniaudio.h"
 
 class Transcriber {
@@ -30,10 +31,27 @@ private:
 // -----------------------------------------------------------------------------
 
 inline void whisper_log_callback(ggml_log_level level, const char * text, void * user_data) {
-    (void)level;
-    (void)text;
     (void)user_data;
-    // Suppress all logs
+    static std::string buffer;
+    static ggml_log_level last_level = GGML_LOG_LEVEL_INFO;
+
+    if (level != GGML_LOG_LEVEL_CONT) {
+        if (!buffer.empty()) {
+            if (last_level == GGML_LOG_LEVEL_ERROR) Logger::instance().error("Whisper: " + buffer);
+            else Logger::instance().log("Whisper: " + buffer);
+            buffer.clear();
+        }
+        last_level = level;
+    }
+
+    if (text) buffer += text;
+
+    if (!buffer.empty() && buffer.back() == '\n') {
+        buffer.pop_back();
+        if (last_level == GGML_LOG_LEVEL_ERROR) Logger::instance().error("Whisper: " + buffer);
+        else Logger::instance().log("Whisper: " + buffer);
+        buffer.clear();
+    }
 }
 
 inline Transcriber::Transcriber(const std::string& modelPath) : m_ctx(nullptr) {

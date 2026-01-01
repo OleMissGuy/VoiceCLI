@@ -6,12 +6,15 @@
 #include <vector>
 #include <stdexcept>
 #include <filesystem>
+#include <atomic>
+#include <cmath>
+#include <algorithm>
 
 #include "../third_party/miniaudio.h"
 
 class Recorder {
 public:
-  Recorder(unsigned int deviceIndex, unsigned int sampleRate = 16000);
+  Recorder(ma_device_id* pDeviceID, unsigned int sampleRate = 16000);
   ~Recorder();
 
   // Disable copying
@@ -24,6 +27,8 @@ public:
   void pause();
   void resume();
   bool isRecording() const;
+  float getCurrentLevel() const;
+  void setWriting(bool writing);
 
 private:
   static void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount);
@@ -34,6 +39,8 @@ private:
   ma_encoder_config m_encoderConfig;
   bool m_isRecording;
   bool m_isInitialized;
+  std::atomic<float> m_currentLevel;
+  std::atomic<bool> m_isWriting;
 };
 
 // -----------------------------------------------------------------------------
@@ -43,33 +50,34 @@ private:
 inline void Recorder::data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount) {
   Recorder* pRecorder = (Recorder*)pDevice->pUserData;
   if (pRecorder && pRecorder->m_isRecording) {
-    ma_encoder_write_pcm_frames(&pRecorder->m_encoder, pInput, frameCount, NULL);
+    if (pRecorder->m_isWriting.load(std::memory_order_relaxed)) {
+        ma_encoder_write_pcm_frames(&pRecorder->m_encoder, pInput, frameCount, NULL);
+    }
+
+    // Level Meter Calculation (Peak)
+    float maxVal = 0.0f;
+    const float* samples = (const float*)pInput;
+    for (ma_uint32 i = 0; i < frameCount; ++i) {
+        float val = std::abs(samples[i]);
+        if (val > maxVal) maxVal = val;
+    }
+
+    float current = pRecorder->m_currentLevel.load(std::memory_order_relaxed);
+    if (maxVal > current) {
+        pRecorder->m_currentLevel.store(maxVal, std::memory_order_relaxed);
+    } else {
+        // Smooth decay
+        pRecorder->m_currentLevel.store(current * 0.90f, std::memory_order_relaxed);
+    }
   }
   (void)pOutput; // Unused
 }
 
-inline Recorder::Recorder(unsigned int deviceIndex, unsigned int sampleRate) : m_isRecording(false), m_isInitialized(false) {
-  (void)deviceIndex; // Unused for now
+inline Recorder::Recorder(ma_device_id* pDeviceID, unsigned int sampleRate) 
+    : m_isRecording(false), m_isInitialized(false), m_currentLevel(0.0f), m_isWriting(true) {
   // Configure Device
   m_deviceConfig = ma_device_config_init(ma_device_type_capture);
-  m_deviceConfig.capture.pDeviceID = NULL; // Default device ID logic usually requires full ID struct, 
-                                           // but for specific index we need to enumerate first in main.
-                                           // For now, let's rely on miniaudio's device array from Context if possible.
-                                           // Actually, simpliest way with index is passing the ID.
-                                           // However, since we want to keep this simple, let's assume the caller
-                                           // has confirmed the device exists. 
-                                           // *Correction*: To target a specific index, we need the context.
-                                           // To keep this class self-contained without re-enumerating, 
-                                           // we will accept the *Default* behavior if index is 0/Default, 
-                                           // or requires caller to pass the ID.
-                                           // Let's stick to standard behavior: 
-                                           // If the user wants a specific device, we need to find its ID.
-                                           // For this iteration, let's just use the *Default Device* to start simple.
-  
-  // Note: To truly select a device by index, we need to pass the ma_device_id. 
-  // Since AudioConfig already lists them, we might refactor later to pass the ID.
-  // For now, we assume Default Device for simplicity of the Recorder class, 
-  // or we need to add context logic here.
+  m_deviceConfig.capture.pDeviceID = pDeviceID; 
   
   // Let's set the format for high quality voice
   m_deviceConfig.capture.format = ma_format_f32;
@@ -87,6 +95,14 @@ inline bool Recorder::isRecording() const {
   return m_isRecording;
 }
 
+inline float Recorder::getCurrentLevel() const {
+    return m_currentLevel.load(std::memory_order_relaxed);
+}
+
+inline void Recorder::setWriting(bool writing) {
+    m_isWriting.store(writing, std::memory_order_relaxed);
+}
+
 inline void Recorder::start(const std::string& outputFile) {
   if (m_isRecording) return;
 
@@ -95,6 +111,8 @@ inline void Recorder::start(const std::string& outputFile) {
   if (ma_encoder_init_file(outputFile.c_str(), &m_encoderConfig, &m_encoder) != MA_SUCCESS) {
     throw std::runtime_error("Failed to initialize audio output file.");
   }
+  
+  m_isWriting.store(true); // Default to writing
 
   // Initialize Device (we do this here to ensure fresh start)
   if (ma_device_init(NULL, &m_deviceConfig, &m_device) != MA_SUCCESS) {

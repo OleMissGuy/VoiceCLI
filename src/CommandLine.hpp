@@ -14,6 +14,10 @@ struct AppConfig {
   unsigned int sampleRate = 16000;
   std::string modelPath = "models/ggml-base.en.bin";
   unsigned int maxRecordTime = 5; // Minutes
+  std::optional<unsigned int> deviceIndex;
+  float vadThreshold = 0.05f;
+  unsigned int vadTimeoutMs = 2000;
+  std::string triggerKey = "Shift";
 };
 
 class CommandLine {
@@ -43,24 +47,35 @@ inline CommandLine::CommandLine(int argc, char* argv[]) {
   static struct option long_options[] = {
     { "help", no_argument, 0, 'h' },
     { "list-audio-devices", no_argument, 0, 'l' },
+    { "device-index", required_argument, 0, 'd' },
     { "model", required_argument, 0, 'm' },
-    { "max-record-time", required_argument, 0, 'M' },
+    { "max-rec-time", required_argument, 0, 'M' },
     { "sample-rate", required_argument, 0, 'r' },
     { "test-record", no_argument, 0, 't' },
     { "verbose", no_argument, 0, 'v' },
+    { "vad-threshold", required_argument, 0, 'S' },
+    { "vad-timeout", required_argument, 0, 'T' },
+    { "trigger-key", required_argument, 0, 'k' },
     { 0, 0, 0, 0 }
   };
 
   int opt;
   int option_index = 0;
 
-  while ((opt = getopt_long(argc, argv, "hlm:M:r:tv", long_options, &option_index)) != -1) {
+  while ((opt = getopt_long(argc, argv, "hld:m:M:r:tvS:T:k:", long_options, &option_index)) != -1) {
     switch (opt) {
     case 'h':
       m_config.showHelp = true;
       break;
     case 'l':
       m_config.listAudioDevices = true;
+      break;
+    case 'd':
+      try {
+        m_config.deviceIndex = std::stoul(optarg);
+      } catch (...) {
+        std::cerr << "Invalid device index provided." << std::endl;
+      }
       break;
     case 'm':
       m_config.modelPath = optarg;
@@ -85,6 +100,23 @@ inline CommandLine::CommandLine(int argc, char* argv[]) {
     case 'v':
       m_config.verbose = true;
       break;
+    case 'S':
+      try {
+        m_config.vadThreshold = std::stof(optarg);
+      } catch (...) {
+        std::cerr << "Invalid VAD threshold provided. Using default 0.05." << std::endl;
+      }
+      break;
+    case 'T':
+      try {
+        m_config.vadTimeoutMs = std::stoul(optarg);
+      } catch (...) {
+        std::cerr << "Invalid VAD timeout provided. Using default 2000ms." << std::endl;
+      }
+      break;
+    case 'k':
+      m_config.triggerKey = optarg;
+      break;
     case '?':
       // getopt_long prints its own error message
       m_config.showHelp = true;
@@ -107,11 +139,15 @@ inline void CommandLine::printHelp() const {
             << "Options:\n"
             << "  -h, --help                Show this help message\n"
             << "  -l, --list-audio-devices  List available audio capture devices\n"
+            << "  -d, --device-index <idx>  Select a specific audio capture device by index\n"
             << "  -m, --model <path>        Path to Whisper model file (default: models/ggml-base.en.bin)\n"
-            << "  -M, --max-record-time <min> Set max recording time per session (default: 5 min)\n"
+            << "  -M, --max-rec-time <min>  Set max record time per session (default: 5 min)\n"
             << "  -r, --sample-rate <hz>    Set recording sample rate (default: 16000)\n"
             << "  -t, --test-record         Record 5 seconds of audio to verify input\n"
             << "  -v, --verbose             Enable verbose output (e.g., print selected device)\n"
+            << "  -S, --vad-threshold <val> Set VAD sensitivity (0.0 to 1.0, default 0.05)\n"
+            << "  -T, --vad-timeout <ms>    Set VAD silence timeout in ms (default 2000)\n"
+            << "  -k, --trigger-key <key>   Set double-tap trigger key (Shift, Control, Alt, Super; default Shift)\n"
             << std::endl;
 }
 

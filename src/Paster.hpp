@@ -92,7 +92,7 @@ inline void Paster::paste(const std::string& text, Window targetWindow, bool use
 
   // 3. Serve the SelectionRequest
   // We need to wait for the target app to ask for the data.
-  // We'll timeout after 1 second if no one asks.
+  // We'll timeout after 5 seconds if no one asks.
   auto start = std::chrono::steady_clock::now();
   XEvent e;
 
