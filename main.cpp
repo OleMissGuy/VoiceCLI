@@ -12,6 +12,9 @@
 #include <iostream>
 #include <thread>
 #include <vector>
+#include <cstdio>
+#include <fstream>
+#include <filesystem>
 
 // Helper to trim whitespace
 std::string trim(const std::string& s) {
@@ -19,6 +22,43 @@ std::string trim(const std::string& s) {
   if (start == std::string::npos) return "";
   auto end = s.find_last_not_of(" \t\n\r");
   return s.substr(start, end - start + 1);
+}
+
+// Helper to run post-processing command
+std::string runPostProcess(const std::string& cmd, const std::string& input) {
+    if (cmd.empty()) return input;
+
+    // Write input to temp file
+    std::string tempIn = "/tmp/voicecli_pp_in.txt";
+    std::ofstream ofs(tempIn);
+    if (!ofs) {
+        Logger::instance().error("Failed to write post-process input file.");
+        return input;
+    }
+    ofs << input;
+    ofs.close();
+
+    // Construct command: cmd < tempIn
+    std::string fullCmd = cmd + " < " + tempIn;
+    
+    // Execute and read stdout
+    std::string output;
+    char buffer[128];
+    FILE* pipe = popen(fullCmd.c_str(), "r");
+    if (!pipe) {
+        Logger::instance().error("Failed to execute post-process command.");
+        return input;
+    }
+    
+    while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
+        output += buffer;
+    }
+    pclose(pipe);
+    
+    // Cleanup
+    std::filesystem::remove(tempIn);
+    
+    return trim(output);
 }
 
 // Helper to find the desired or default device
@@ -405,6 +445,11 @@ int main(int argc, char* argv[]) {
         try {
           std::string rawText = transcriber.transcribe(tempFile);
           std::string text = trim(rawText);
+
+          if (!config.postProcessCommand.empty()) {
+              Logger::instance().log("Running post-process: " + config.postProcessCommand);
+              text = runPostProcess(config.postProcessCommand, text);
+          }
 
           if (!text.empty()) {
             if (appendSpace) text += " ";
