@@ -11,8 +11,18 @@
 #include "Logger.hpp"
 #include "../third_party/miniaudio.h"
 
+/**
+ * @brief Handles speech-to-text transcription using the Whisper model.
+ * 
+ * Manages the Whisper context and performs inference on WAV audio files.
+ */
 class Transcriber {
 public:
+  /**
+   * @brief Initializes the Whisper context with a pre-trained model.
+   * @param modelPath Path to the ggml-*.bin Whisper model file.
+   * @throws std::runtime_error If model loading fails.
+   */
   Transcriber(const std::string& modelPath);
   ~Transcriber();
 
@@ -20,6 +30,16 @@ public:
   Transcriber(const Transcriber&) = delete;
   Transcriber& operator=(const Transcriber&) = delete;
 
+  /**
+   * @brief Transcribes a WAV audio file to text.
+   * 
+   * Loads the audio file using miniaudio, converts to the required 16kHz float format,
+   * and runs Whisper inference.
+   * 
+   * @param wavPath Path to the input WAV file.
+   * @return The transcribed text string.
+   * @throws std::runtime_error If audio loading or inference fails.
+   */
   std::string transcribe(const std::string& wavPath);
 
 private:
@@ -29,30 +49,6 @@ private:
 // -----------------------------------------------------------------------------
 // Inline Implementations
 // -----------------------------------------------------------------------------
-
-inline void whisper_log_callback(ggml_log_level level, const char * text, void * user_data) {
-    (void)user_data;
-    static std::string buffer;
-    static ggml_log_level last_level = GGML_LOG_LEVEL_INFO;
-
-    if (level != GGML_LOG_LEVEL_CONT) {
-        if (!buffer.empty()) {
-            if (last_level == GGML_LOG_LEVEL_ERROR) Logger::instance().error("Whisper: " + buffer);
-            else Logger::instance().log("Whisper: " + buffer);
-            buffer.clear();
-        }
-        last_level = level;
-    }
-
-    if (text) buffer += text;
-
-    if (!buffer.empty() && buffer.back() == '\n') {
-        buffer.pop_back();
-        if (last_level == GGML_LOG_LEVEL_ERROR) Logger::instance().error("Whisper: " + buffer);
-        else Logger::instance().log("Whisper: " + buffer);
-        buffer.clear();
-    }
-}
 
 inline Transcriber::Transcriber(const std::string& modelPath) : m_ctx(nullptr) {
   whisper_log_set(whisper_log_callback, nullptr);
@@ -71,6 +67,16 @@ inline Transcriber::~Transcriber() {
   }
 }
 
+/**
+ * @brief Transcribes a WAV audio file to text.
+ * 
+ * Loads the audio file using miniaudio, converts to the required 16kHz float format,
+ * and runs Whisper inference.
+ * 
+ * @param wavPath Path to the input WAV file.
+ * @return The transcribed text string.
+ * @throws std::runtime_error If audio loading or inference fails.
+ */
 inline std::string Transcriber::transcribe(const std::string& wavPath) {
   // 1. Decode WAV file using miniaudio
   ma_decoder decoder;
@@ -117,6 +123,40 @@ inline std::string Transcriber::transcribe(const std::string& wavPath) {
   }
 
   return result;
+}
+
+/**
+ * @brief Callback for routing Whisper (ggml) library logs to our Logger.
+ * 
+ * Handles multi-line log messages by buffering them until a newline or a non-continuation
+ * level is encountered. Logs to Logger::error for GGML_LOG_LEVEL_ERROR, otherwise to Logger::log.
+ * 
+ * @param level The log level from ggml.
+ * @param text The log message part.
+ * @param user_data User-defined data (unused).
+ */
+inline void whisper_log_callback(ggml_log_level level, const char * text, void * user_data) {
+    (void)user_data;
+    static std::string buffer;
+    static ggml_log_level last_level = GGML_LOG_LEVEL_INFO;
+
+    if (level != GGML_LOG_LEVEL_CONT) {
+        if (!buffer.empty()) {
+            if (last_level == GGML_LOG_LEVEL_ERROR) Logger::instance().error("Whisper: " + buffer);
+            else Logger::instance().log("Whisper: " + buffer);
+            buffer.clear();
+        }
+        last_level = level;
+    }
+
+    if (text) buffer += text;
+
+    if (!buffer.empty() && buffer.back() == '\n') {
+        buffer.pop_back();
+        if (last_level == GGML_LOG_LEVEL_ERROR) Logger::instance().error("Whisper: " + buffer);
+        else Logger::instance().log("Whisper: " + buffer);
+        buffer.clear();
+    }
 }
 
 #endif // VOICECLI_SRC_TRANSCRIBER_HPP

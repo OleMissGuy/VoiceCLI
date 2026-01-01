@@ -21,14 +21,37 @@ struct AudioDevice {
 
 class AudioConfig {
 public:
+  /**
+   * @brief Initializes the miniaudio context.
+   * @throws std::runtime_error if context initialization fails.
+   */
   AudioConfig();
+
+  /**
+   * @brief Uninitializes the miniaudio context.
+   */
   ~AudioConfig();
 
   // Disable copying
   AudioConfig(const AudioConfig&) = delete;
   AudioConfig& operator=(const AudioConfig&) = delete;
 
+  /**
+   * @brief Enumerates all available audio capture devices.
+   * 
+   * Queries the miniaudio context for capture devices and retrieves detailed
+   * capabilities (channels, formats) for each.
+   * 
+   * @return A vector of AudioDevice structures containing device details.
+   */
   std::vector<AudioDevice> listCaptureDevices();
+
+  /**
+   * @brief Retrieves the miniaudio device ID for a given device index.
+   * 
+   * @param index The 0-based index of the capture device.
+   * @return A pointer to the internal ma_device_id, or nullptr if the index is invalid.
+   */
   ma_device_id* getCaptureDeviceID(unsigned int index);
 
 private:

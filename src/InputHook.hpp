@@ -12,8 +12,18 @@
 
 #include "Logger.hpp"
 
+/**
+ * @brief Monitors global keyboard input for a specific trigger sequence.
+ * 
+ * Currently monitors for a double-tap on a specified modifier key (Shift, Control, Alt, Super).
+ * Uses X11 XQueryKeymap to read keyboard state without grabbing the keyboard.
+ */
 class InputHook {
 public:
+  /**
+   * @brief Initializes connection to the X server.
+   * @throws std::runtime_error If X display cannot be opened.
+   */
   InputHook();
   ~InputHook();
 
@@ -21,7 +31,13 @@ public:
   InputHook(const InputHook&) = delete;
   InputHook& operator=(const InputHook&) = delete;
 
-  // Blocks and monitors input until a trigger is detected. Returns true if triggered.
+  /**
+   * @brief Blocks and monitors input until the trigger sequence is detected.
+   * 
+   * @param keyName The name of the trigger key (e.g., "Shift", "Control"). Case-insensitive.
+   * @param verbose If true, prints debug info to stdout.
+   * @return true if triggered successfully, false if monitoring stopped or failed.
+   */
   bool monitor(const std::string& keyName, bool verbose = false);
 
 private:

@@ -10,16 +10,56 @@
 #include <algorithm>
 #include <vector>
 
+/**
+ * @brief Manages the status display window using X11.
+ * 
+ * Displays real-time status information, available commands, and a volume meter.
+ * Handles centering on screen and staying always on top.
+ */
 class StatusWindow {
 public:
+  /**
+   * @brief Initializes X11 connection and pre-allocates resources (fonts, colors).
+   * @throws std::runtime_error if X11 connection fails.
+   */
   StatusWindow();
   ~StatusWindow();
 
+  /**
+   * @brief Creates and displays the status window centered on screen.
+   * @param initialText The text to display initially.
+   */
   void show(const std::string& initialText);
+
+  /**
+   * @brief Updates the text and volume meter display.
+   * @param text The multi-line string to display.
+   * @param volumeLevel Current peak audio level (0.0 to 1.0). If < 0, meter is hidden.
+   */
   void updateText(const std::string& text, float volumeLevel = -1.0f);
+
+  /**
+   * @brief Changes the window background color.
+   * @param colorName X11 color name (e.g., "white", "red", "yellow").
+   */
   void setBackgroundColor(const std::string& colorName);
+
+  /**
+   * @brief Checks if a key has been pressed in the window.
+   * @param outKey Receives the character of the key pressed.
+   * @return true if a key was pressed, false otherwise.
+   */
   bool checkForInput(char& outKey);
+
+  /**
+   * @brief Hides and destroys the status window.
+   */
   void close();
+
+  /**
+   * @brief Blocks until a key is pressed in the window.
+   * @return The character of the key pressed.
+   */
   char waitForKey();
 
 private:

@@ -5,7 +5,11 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <optional>
 
+/**
+ * @brief Configuration structure holding application settings parsed from command arguments.
+ */
 struct AppConfig {
   bool listAudioDevices = false;
   bool showHelp = false;
@@ -21,8 +25,17 @@ struct AppConfig {
   std::string postProcessCommand = "";
 };
 
+/**
+ * @brief Handles parsing of command-line arguments.
+ */
 class CommandLine {
 public:
+  /**
+   * @brief Parses command-line arguments and populates the AppConfig.
+   * 
+   * @param argc Argument count.
+   * @param argv Argument vector.
+   */
   CommandLine(int argc, char* argv[]);
   ~CommandLine();
 
@@ -30,7 +43,16 @@ public:
   CommandLine(const CommandLine&) = delete;
   CommandLine& operator=(const CommandLine&) = delete;
 
+  /**
+   * @brief Retrieves the parsed configuration.
+   * 
+   * @return A reference to the read-only AppConfig.
+   */
   const AppConfig& getConfig() const;
+
+  /**
+   * @brief Prints the help message to stdout.
+   */
   void printHelp() const;
 
 private:

@@ -10,8 +10,18 @@
 #include <chrono>
 #include <cstring>
 
+/**
+ * @brief Handles text pasting into external applications using X11.
+ * 
+ * Simulates Ctrl+V (or Ctrl+Shift+V) and manages the X11 CLIPBOARD selection
+ * to transfer text to the focused window.
+ */
 class Paster {
 public:
+  /**
+   * @brief Initializes connection to the X server and creates a dummy window for selection ownership.
+   * @throws std::runtime_error If X display cannot be opened.
+   */
   Paster();
   ~Paster();
 
@@ -19,7 +29,18 @@ public:
   Paster(const Paster&) = delete;
   Paster& operator=(const Paster&) = delete;
 
-  // Copies text to clipboard and simulates Ctrl+V (or Ctrl+Shift+V if useShift is true)
+  /**
+   * @brief Copies text to the clipboard and simulates a paste keystroke.
+   * 
+   * This function takes ownership of the X11 CLIPBOARD selection, simulates
+   * the paste shortcut key press, and then handles the resulting SelectionRequest
+   * events from the target application to transfer the data.
+   * 
+   * @param text The text to paste.
+   * @param targetWindow The window ID to restore focus to before pasting (optional).
+   * @param useShift If true, simulates Ctrl+Shift+V (often used in terminals).
+   * @param verbose If true, prints debug info.
+   */
   void paste(const std::string& text, Window targetWindow = 0, bool useShift = false, bool verbose = false);
 
 private:

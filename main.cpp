@@ -16,7 +16,11 @@
 #include <fstream>
 #include <filesystem>
 
-// Helper to trim whitespace
+/**
+ * @brief Trims leading and trailing whitespace from a string.
+ * @param s The string to trim.
+ * @return The trimmed string.
+ */
 std::string trim(const std::string& s) {
   auto start = s.find_first_not_of(" \t\n\r");
   if (start == std::string::npos) return "";
@@ -24,80 +28,33 @@ std::string trim(const std::string& s) {
   return s.substr(start, end - start + 1);
 }
 
-// Helper to run post-processing command
+/**
+ * @brief Runs an external shell command for text post-processing.
+ * 
+ * Pipes the input string into the command's stdin and captures its stdout.
+ * 
+ * @param cmd The shell command to execute.
+ * @param input The text to process.
+ * @return The processed text from command's stdout.
+ */
 std::string runPostProcess(const std::string& cmd, const std::string& input) {
-    if (cmd.empty()) return input;
-
-    // Write input to temp file
-    std::string tempIn = "/tmp/voicecli_pp_in.txt";
-    std::ofstream ofs(tempIn);
-    if (!ofs) {
-        Logger::instance().error("Failed to write post-process input file.");
-        return input;
-    }
-    ofs << input;
-    ofs.close();
-
-    // Construct command: cmd < tempIn
-    std::string fullCmd = cmd + " < " + tempIn;
-    
-    // Execute and read stdout
-    std::string output;
-    char buffer[128];
-    FILE* pipe = popen(fullCmd.c_str(), "r");
-    if (!pipe) {
-        Logger::instance().error("Failed to execute post-process command.");
-        return input;
-    }
-    
-    while (fgets(buffer, sizeof(buffer), pipe) != NULL) {
-        output += buffer;
-    }
-    pclose(pipe);
-    
-    // Cleanup
-    std::filesystem::remove(tempIn);
-    
-    return trim(output);
-}
-
-// Helper to find the desired or default device
+//...
+/**
+ * @brief Selects the desired audio device based on user preference or system default.
+ * 
+ * @param audio The AudioConfig instance to query devices from.
+ * @param userIndex Optional user-specified device index.
+ * @return The selected AudioDevice, or std::nullopt if none found.
+ */
 std::optional<AudioDevice> getSelectedDevice(AudioConfig& audio, std::optional<unsigned int> userIndex) {
-  auto devices = audio.listCaptureDevices();
-  
-  if (userIndex) {
-    for (const auto& dev : devices) {
-      if (dev.index == *userIndex) return dev;
-    }
-    std::cerr << "Warning: Requested device index " << *userIndex << " not found. Falling back to default." << std::endl;
-  }
-
-  // Strict preference for System Default
-  for (const auto& dev : devices) {
-    if (dev.isDefault) {
-      return dev;
-    }
-  }
-
-  // Fallback if no default marked (rare)
-  if (!devices.empty()) {
-    return devices[0];
-  }
-
-  return std::nullopt;
-}
-
-// Helper to get currently focused window
+//...
+/**
+ * @brief Retrieves the X11 Window ID of the currently focused window.
+ * 
+ * @return The focused Window ID, or 0 on failure.
+ */
 Window getCurrentFocus() {
-  Display* d = XOpenDisplay(NULL);
-  if (!d) return 0;
 
-  Window focus;
-  int revert;
-  XGetInputFocus(d, &focus, &revert);
-  XCloseDisplay(d);
-  return focus;
-}
 
 int main(int argc, char* argv[]) {
   // Initialize Logger
@@ -250,6 +207,7 @@ int main(int argc, char* argv[]) {
 
     bool shouldExit = false;
     while (!shouldExit) {
+      // 1. Wait for global trigger (Hotkeys)
       if (!input.monitor(config.triggerKey, config.verbose)) {
         break; // Stop if monitor fails
       }
@@ -258,7 +216,7 @@ int main(int argc, char* argv[]) {
       Window activeWin = getCurrentFocus();
       Logger::instance().log(std::format("Captured Active Window ID: {}", activeWin));
 
-      // --- Triggered: Start Recording Session ---
+      // 2. Setup Recording Session
       StatusWindow win;
       win.show("Starting Recording...");
 
@@ -288,7 +246,7 @@ int main(int argc, char* argv[]) {
       std::chrono::steady_clock::duration totalAutoPausedDuration = std::chrono::seconds(0);
       auto lastAutoPauseStart = std::chrono::steady_clock::now();
 
-      // Recording Loop
+      // 3. Recording Loop
       while (true) {
         auto now = std::chrono::steady_clock::now();
 
@@ -321,7 +279,7 @@ int main(int argc, char* argv[]) {
         auto remaining = maxDuration - elapsed;
         int secondsLeft = std::chrono::duration_cast<std::chrono::seconds>(remaining).count();
 
-        // Timeout Logic
+        // Session Timeout Logic
         if (!isTimeout && remaining <= std::chrono::seconds(0)) {
           rec.pause();
           isTimeout = true;
@@ -331,7 +289,7 @@ int main(int argc, char* argv[]) {
           Logger::instance().log("Recording time limit reached.");
         }
 
-        // Background Color Logic
+        // UI Color Updates
         if (isTimeout) {
           win.setBackgroundColor("red");
         } else if (isPaused || isAutoPaused) {
@@ -346,7 +304,7 @@ int main(int argc, char* argv[]) {
           }
         }
 
-        // UI Text Logic
+        // UI Text Construction
         int minutes = secondsLeft / 60;
         int seconds = secondsLeft % 60;
         std::string header;
@@ -377,7 +335,7 @@ int main(int argc, char* argv[]) {
 
         win.updateText(status, rec.getCurrentLevel());
 
-        // Check Input
+        // 4. Handle Window Interaction
         char key = 0;
         if (win.checkForInput(key)) {
           if (key == '+') {
@@ -435,6 +393,7 @@ int main(int argc, char* argv[]) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
 
+      // 5. Finalize and Transcribe
       rec.stop();
 
       if (finishAndTranscribe) {
