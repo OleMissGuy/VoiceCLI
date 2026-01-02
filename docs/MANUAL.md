@@ -4,6 +4,7 @@ This manual provides comprehensive documentation for VoiceCLI, a robust and cust
 
 ## Table of Contents
 1.  [Installation](#1-installation)
+    *   [1.1. Building Whisper.cpp](#11-building-whispercpp)
 2.  [Basic Usage](#2-basic-usage)
     *   [How to Use VoiceCLI: A Workflow Guide](#21-how-to-use-voicecli-a-workflow-guide)
 3.  [Features](#3-features)
@@ -26,6 +27,19 @@ This manual provides comprehensive documentation for VoiceCLI, a robust and cust
 *   `make` utility.
 *   X11 development libraries (e.g., `libx11-dev`, `libxtst-dev` on Debian/Ubuntu).
 *   `miniaudio` and `whisper.cpp` dependencies (included in `third_party/`).
+
+### 1.1. Building Whisper.cpp
+VoiceCLI relies on the `whisper.cpp` library. You must build it first before building VoiceCLI.
+
+Navigate to the `third_party/whisper.cpp` directory and run `make`:
+```bash
+cd third_party/whisper.cpp
+make
+# (Optional: Download a model)
+./models/download-ggml-model.sh base.en
+cd ../../
+```
+**Note:** The `download-ggml-model.sh` script will download the `base.en` model by default, which is configured in VoiceCLI. You can choose other models if desired, but remember to update the `--model` flag when running VoiceCLI.
 
 ### Building VoiceCLI
 Navigate to the project root and run `make`:
