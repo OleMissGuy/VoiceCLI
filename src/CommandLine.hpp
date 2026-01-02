@@ -23,6 +23,8 @@ struct AppConfig {
   unsigned int vadTimeoutMs = 2000;
   std::string triggerKey = "Shift";
   std::string postProcessCommand = "";
+  bool showVersion = false;
+  bool logTranscriptions = false; // New flag to control logging of transcriptions
 };
 
 /**
@@ -80,13 +82,15 @@ inline CommandLine::CommandLine(int argc, char* argv[]) {
     { "vad-timeout", required_argument, 0, 'T' },
     { "trigger-key", required_argument, 0, 'k' },
     { "post-process", required_argument, 0, 'P' },
+    { "version", no_argument, 0, 'V' },
+    { "log-transcriptions", no_argument, 0, 'L' }, // New flag to control transcription logging
     { 0, 0, 0, 0 }
   };
 
   int opt;
   int option_index = 0;
 
-  while ((opt = getopt_long(argc, argv, "hld:m:M:r:tvS:T:k:P:", long_options, &option_index)) != -1) {
+  while ((opt = getopt_long(argc, argv, "hld:m:M:r:tvS:T:k:P:VL", long_options, &option_index)) != -1) {
     switch (opt) {
     case 'h':
       m_config.showHelp = true;
@@ -150,6 +154,12 @@ inline CommandLine::CommandLine(int argc, char* argv[]) {
     case 'P':
       m_config.postProcessCommand = optarg;
       break;
+    case 'V':
+      m_config.showVersion = true;
+      break;
+    case 'L':
+      m_config.logTranscriptions = true;
+      break;
     case '?':
       // getopt_long prints its own error message
       m_config.showHelp = true;
@@ -182,6 +192,8 @@ inline void CommandLine::printHelp() const {
             << "  -T, --vad-timeout <ms>    Set VAD silence timeout in ms (default 2000)\n"
             << "  -k, --trigger-key <key>   Set double-tap trigger key (Shift, Control, Alt, Super; default Shift)\n"
             << "  -P, --post-process <cmd>  Shell command to process text before pasting\n"
+            << "  -V, --version             Show version information and exit\n"
+            << "  -L, --log-transcriptions  Enable logging of transcribed text (default: disabled)\n"
             << std::endl;
 }
 

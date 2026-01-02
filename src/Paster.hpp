@@ -93,7 +93,7 @@ inline void Paster::paste(const std::string& text, Window targetWindow, bool use
   }
 
   // 2. Simulate Ctrl+V (Wait a bit for focus to settle if window was just closed)
-  std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Shorter wait
 
   KeyCode ctrlKey = XKeysymToKeycode(m_display, XK_Control_L);
   KeyCode shiftKey = XKeysymToKeycode(m_display, XK_Shift_L);
@@ -113,64 +113,50 @@ inline void Paster::paste(const std::string& text, Window targetWindow, bool use
 
   // 3. Serve the SelectionRequest
   // We need to wait for the target app to ask for the data.
-  // We'll timeout after 5 seconds if no one asks.
+  // We'll poll for events with a timeout.
   auto start = std::chrono::steady_clock::now();
   XEvent e;
-
   bool served = false;
 
-  while (true) {
-    // Check timeout
-    if (std::chrono::steady_clock::now() - start > std::chrono::seconds(5)) {
-      break; 
-    }
+  while (std::chrono::steady_clock::now() - start < std::chrono::seconds(2)) {
+    // Use a non-blocking check for events
+    if (XCheckTypedWindowEvent(m_display, m_window, SelectionRequest, &e) ||
+        XCheckTypedWindowEvent(m_display, m_window, SelectionClear, &e)) {
+      
+      if (e.type == SelectionRequest) {
+        if (e.xselectionrequest.selection == clipboard) {
+          XSelectionEvent s;
+          s.type = SelectionNotify;
+          s.requestor = e.xselectionrequest.requestor;
+          s.selection = e.xselectionrequest.selection;
+          s.target = e.xselectionrequest.target;
+          s.property = e.xselectionrequest.property;
+          s.time = e.xselectionrequest.time;
 
-    // Non-blocking check? XNextEvent blocks. 
-    // Use XPending to poll or just block with a select? 
-    // Since we just triggered the paste, it should happen fast. 
-    // But if we block forever and the app ignores it, we hang.
-    if (XPending(m_display) > 0) {
-        XNextEvent(m_display, &e);
-    } else {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        continue;
-    }
+          if (e.xselectionrequest.target == targets) {
+              Atom supported[] = { utf8String, XA_STRING };
+              XChangeProperty(m_display, s.requestor, s.property, XA_ATOM, 32, 
+                              PropModeReplace, (unsigned char*)supported, 2);
+          } else if (e.xselectionrequest.target == utf8String || e.xselectionrequest.target == XA_STRING) {
+              XChangeProperty(m_display, s.requestor, s.property, e.xselectionrequest.target, 8, 
+                              PropModeReplace, (unsigned char*)text.c_str(), text.length());
+              served = true;
+          } else {
+              s.property = None; 
+          }
 
-    if (e.type == SelectionRequest) {
-      if (e.xselectionrequest.selection == clipboard) {
-        XSelectionEvent s;
-        s.type = SelectionNotify;
-        s.requestor = e.xselectionrequest.requestor;
-        s.selection = e.xselectionrequest.selection;
-        s.target = e.xselectionrequest.target;
-        s.property = e.xselectionrequest.property;
-        s.time = e.xselectionrequest.time;
-
-        if (e.xselectionrequest.target == targets) {
-            // They want to know what we support
-            Atom supported[] = { utf8String, XA_STRING };
-            XChangeProperty(m_display, s.requestor, s.property, XA_ATOM, 32, 
-                            PropModeReplace, (unsigned char*)supported, 2);
-        } else if (e.xselectionrequest.target == utf8String || e.xselectionrequest.target == XA_STRING) {
-            // Send the text
-            XChangeProperty(m_display, s.requestor, s.property, e.xselectionrequest.target, 8, 
-                            PropModeReplace, (unsigned char*)text.c_str(), text.length());
-            served = true;
-        } else {
-            // Unsupported
-            s.property = None; 
+          XSendEvent(m_display, e.xselectionrequest.requestor, True, 0, (XEvent*)&s);
+          XFlush(m_display);
+          
+          if (served) break; 
         }
-
-        XSendEvent(m_display, e.xselectionrequest.requestor, True, 0, (XEvent*)&s);
-        XFlush(m_display);
-        
-        // If we successfully served the text, we can probably exit the loop soon.
-        // Some apps might request TARGETS first, then STRING. So don't break immediately on TARGETS.
-        if (served) break; 
+      } else if (e.type == SelectionClear) {
+        // We lost ownership, so we're done.
+        break;
       }
-    } else if (e.type == SelectionClear) {
-      // We lost ownership
-      break;
+    } else {
+      // No event, sleep briefly to avoid busy-waiting
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
   }
 }

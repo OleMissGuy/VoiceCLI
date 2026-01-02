@@ -1,7 +1,12 @@
 CXX      := g++
 CXXFLAGS := -std=c++20 -Wall -Wextra
+
+# Get Git version information
+GIT_VERSION := $(shell git describe --always --dirty --tags)
+CXXFLAGS   += -DAPP_VERSION=\"$(GIT_VERSION)\"
+
 # Include paths for Whisper and GGML
-INCLUDES := -Ithird_party/whisper.cpp/include -Ithird_party/whisper.cpp/ggml/include
+INCLUDES := -Ithird_party/whisper.cpp/include -Ithird_party/whisper.cpp/ggml/include -Ithird_party/backward-cpp
 
 # Library paths
 WHISPER_BUILD := third_party/whisper.cpp/build
@@ -11,7 +16,7 @@ LIBS     := $(WHISPER_BUILD)/src/libwhisper.a \
             $(WHISPER_BUILD)/ggml/src/libggml-base.a
 
 # System libraries
-LDFLAGS  := -ldl -lpthread -lm -lX11 -lXtst -lgomp
+LDFLAGS  := -ldl -lpthread -lm -lX11 -lXtst -lgomp -rdynamic -lbfd
 
 SRC      := main.cpp src/miniaudio_impl.cpp
 TARGET   := VoiceCLI
@@ -30,7 +35,7 @@ debug: $(DEBUG_DIR)/$(TARGET)
 
 $(DEBUG_DIR)/$(TARGET): $(SRC)
 	@mkdir -p $(DEBUG_DIR)
-	$(CXX) $(CXXFLAGS) $(INCLUDES) -g -O0 $(SRC) $(LIBS) -o $@ $(LDFLAGS)
+	$(CXX) $(CXXFLAGS) $(INCLUDES) -g3 -O0 $(SRC) $(LIBS) -o $@ $(LDFLAGS)
 
 # Release build
 release: $(RELEASE_DIR)/$(TARGET)

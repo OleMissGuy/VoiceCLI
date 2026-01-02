@@ -46,6 +46,20 @@ public:
    */
   void error(const std::string& message);
 
+  /**
+   * @brief Retrieves the current path of the log file.
+   * 
+   * @return The path to the log file.
+   */
+  const std::string& getLogFilePath() const;
+
+  /**
+   * @brief Closes the current log file stream.
+   * 
+   * This is useful before attempting to rename the log file during a crash handling scenario.
+   */
+  void closeLogFile();
+
 private:
   Logger() = default;
   ~Logger();
@@ -56,6 +70,7 @@ private:
 
   std::ofstream m_file;
   std::mutex m_mutex;
+  std::string m_logFilePath;
 };
 
 // -----------------------------------------------------------------------------
@@ -71,6 +86,17 @@ inline Logger::~Logger() {
 inline Logger& Logger::instance() {
   static Logger instance;
   return instance;
+}
+
+inline const std::string& Logger::getLogFilePath() const {
+    return m_logFilePath;
+}
+
+inline void Logger::closeLogFile() {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    if (m_file.is_open()) {
+        m_file.close();
+    }
 }
 
 inline void Logger::error(const std::string& message) {
@@ -113,7 +139,8 @@ inline void Logger::setLogFile(const std::string& path) {
   if (m_file.is_open()) {
     m_file.close();
   }
-  m_file.open(path, std::ios::app);
+  m_logFilePath = path;
+  m_file.open(path, std::ios::out | std::ios::trunc); // Overwrite mode
   if (!m_file.is_open()) {
     std::cerr << "Failed to open log file: " << path << std::endl;
   }
