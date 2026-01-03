@@ -4,6 +4,23 @@
 
 The VoiceCLI application incorporates an **asynchronous-signal-safe crash reporting mechanism**. Its primary purpose is to capture critical runtime errors (like segmentation faults, illegal instructions, etc.) and generate a detailed report that aids in debugging and understanding the application's state at the time of failure. This mechanism ensures that even when the application encounters a fatal error, it attempts to save diagnostic information before terminating.
 
+A typical crash report file (e.g., `CrashReport-2026-01-02,15:31:16.log`) provides a full stack trace, similar to a debugger's call trace:
+
+```log
+VoiceCLI Version: 69c6110-dirty
+
+!!! CRITICAL ERROR: VoiceCLI has crashed with signal 11 !!!
+Stack trace:
+#0    Source:/usr/include/c++/11/bits/stl_vector.h:1040         Function:_M_range_check
+#1    Source:/<path>/VoiceCLI/src/Transcriber.hpp:148      Function:Transcriber::Transcriber
+#2    Source:/<path>/VoiceCLI/main.cpp:320                Function:main
+#3    Source:/usr/lib/x86_64-linux-gnu/libc.so.6(+0x29d90)  Function:__libc_start_call_main
+#4    Source:/usr/lib/x86_64-linux-gnu/libc.so.6(+0x29e40)  Function:__libc_start_main
+#5    Source:/<path>/VoiceCLI/debug/VoiceCLI()             Function:_start
+```
+(Note: The exact content will vary based on the specific crash and build environment.)
+
+
 ## Key Features
 
 *   **Signal Handling:** Catches common fatal signals such as `SIGSEGV`, `SIGABRT`, `SIGFPE`, `SIGILL`, `SIGBUS`, and `SIGTERM`.

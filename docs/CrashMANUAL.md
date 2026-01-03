@@ -72,4 +72,6 @@ To use the crash reporting functionality in your C++ project:
 
 4.  **Compilation:** Ensure that `backward-cpp` is available and linked during compilation. The `Makefile` in this project includes the necessary paths and links `backward-cpp` automatically. For optimal debugging of crashes, it is recommended to compile with `-O0` (no optimization) and `-g3` (full debug information) flags, particularly for debug builds.
 
+5.  **Example Project:** For a complete, real-world example of this crash reporting mechanism in action, refer to the VoiceCLI project on GitHub: [https://github.com/OleMissGuy/VoiceCLI](https://github.com/OleMissGuy/VoiceCLI).
+
 By following these steps, your application will be able to generate detailed crash reports, aiding in debugging and stability.
