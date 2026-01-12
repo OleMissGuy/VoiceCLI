@@ -72,6 +72,8 @@ inline Paster::~Paster() {
 inline void Paster::paste(const std::string& text, Window targetWindow, bool useShift, bool verbose) {
   if (text.empty()) return;
 
+  if (verbose) std::cout << "Paster: Paste called." << std::endl;
+
   Atom clipboard = XInternAtom(m_display, "CLIPBOARD", False);
   Atom utf8String = XInternAtom(m_display, "UTF8_STRING", False);
   Atom targets = XInternAtom(m_display, "TARGETS", False);
@@ -79,9 +81,10 @@ inline void Paster::paste(const std::string& text, Window targetWindow, bool use
   // 1. Set Selection Owner
   XSetSelectionOwner(m_display, clipboard, m_window, CurrentTime);
   if (XGetSelectionOwner(m_display, clipboard) != m_window) {
-    std::cerr << "Failed to acquire clipboard ownership." << std::endl;
+    if (verbose) std::cerr << "Paster: Failed to acquire clipboard ownership." << std::endl;
     return;
   }
+  if (verbose) std::cout << "Paster: Acquired clipboard ownership." << std::endl;
 
   // Restore focus if a target window was provided
   if (targetWindow != 0) {
@@ -93,12 +96,13 @@ inline void Paster::paste(const std::string& text, Window targetWindow, bool use
   }
 
   // 2. Simulate Ctrl+V (Wait a bit for focus to settle if window was just closed)
-  std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Shorter wait
+  std::this_thread::sleep_for(std::chrono::milliseconds(200)); 
 
   KeyCode ctrlKey = XKeysymToKeycode(m_display, XK_Control_L);
   KeyCode shiftKey = XKeysymToKeycode(m_display, XK_Shift_L);
   KeyCode vKey = XKeysymToKeycode(m_display, XK_v);
 
+  if (verbose) std::cout << "Paster: Simulating Ctrl+V." << std::endl;
   XTestFakeKeyEvent(m_display, ctrlKey, True, 0);  // Ctrl Down
   if (useShift) {
       XTestFakeKeyEvent(m_display, shiftKey, True, 0); // Shift Down
@@ -110,6 +114,7 @@ inline void Paster::paste(const std::string& text, Window targetWindow, bool use
   }
   XTestFakeKeyEvent(m_display, ctrlKey, False, 0); // Ctrl Up
   XFlush(m_display);
+  if (verbose) std::cout << "Paster: Ctrl+V simulation complete." << std::endl;
 
   // 3. Serve the SelectionRequest
   // We need to wait for the target app to ask for the data.
@@ -118,12 +123,14 @@ inline void Paster::paste(const std::string& text, Window targetWindow, bool use
   XEvent e;
   bool served = false;
 
+  if (verbose) std::cout << "Paster: Entering event loop." << std::endl;
   while (std::chrono::steady_clock::now() - start < std::chrono::seconds(2)) {
     // Use a non-blocking check for events
     if (XCheckTypedWindowEvent(m_display, m_window, SelectionRequest, &e) ||
         XCheckTypedWindowEvent(m_display, m_window, SelectionClear, &e)) {
       
       if (e.type == SelectionRequest) {
+        if (verbose) std::cout << "Paster: SelectionRequest received." << std::endl;
         if (e.xselectionrequest.selection == clipboard) {
           XSelectionEvent s;
           s.type = SelectionNotify;
@@ -134,14 +141,17 @@ inline void Paster::paste(const std::string& text, Window targetWindow, bool use
           s.time = e.xselectionrequest.time;
 
           if (e.xselectionrequest.target == targets) {
+              if (verbose) std::cout << "Paster: Serving TARGETS." << std::endl;
               Atom supported[] = { utf8String, XA_STRING };
               XChangeProperty(m_display, s.requestor, s.property, XA_ATOM, 32, 
                               PropModeReplace, (unsigned char*)supported, 2);
           } else if (e.xselectionrequest.target == utf8String || e.xselectionrequest.target == XA_STRING) {
+              if (verbose) std::cout << "Paster: Serving UTF8_STRING." << std::endl;
               XChangeProperty(m_display, s.requestor, s.property, e.xselectionrequest.target, 8, 
                               PropModeReplace, (unsigned char*)text.c_str(), text.length());
               served = true;
           } else {
+              if (verbose) std::cout << "Paster: Unknown target requested." << std::endl;
               s.property = None; 
           }
 
@@ -151,6 +161,7 @@ inline void Paster::paste(const std::string& text, Window targetWindow, bool use
           if (served) break; 
         }
       } else if (e.type == SelectionClear) {
+        if (verbose) std::cout << "Paster: SelectionClear received." << std::endl;
         // We lost ownership, so we're done.
         break;
       }
@@ -159,6 +170,8 @@ inline void Paster::paste(const std::string& text, Window targetWindow, bool use
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
   }
+  if (verbose && !served) std::cout << "Paster: Event loop timed out." << std::endl;
+  if (verbose) std::cout << "Paster: Paste finished." << std::endl;
 }
 
 #endif // VOICECLI_SRC_PASTER_HPP

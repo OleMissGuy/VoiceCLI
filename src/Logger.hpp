@@ -140,6 +140,13 @@ inline void Logger::setLogFile(const std::string& path) {
     m_file.close();
   }
   m_logFilePath = path;
+
+  // Create directory if it doesn't exist
+  std::filesystem::path logPath(path);
+  if (logPath.has_parent_path()) {
+    std::filesystem::create_directories(logPath.parent_path());
+  }
+
   m_file.open(path, std::ios::out | std::ios::trunc); // Overwrite mode
   if (!m_file.is_open()) {
     std::cerr << "Failed to open log file: " << path << std::endl;

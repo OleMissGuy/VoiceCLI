@@ -202,7 +202,9 @@ int main(int argc, char* argv[]) {
   std::signal(SIGTERM, crash_handler);
 
   // Initialize Logger
-  Logger::instance().setLogFile("voicecli.log");
+  std::string homeDir = getenv("HOME");
+  std::string logPath = homeDir + "/.VoiceCLI/voicecli.log";
+  Logger::instance().setLogFile(logPath);
   Logger::instance().log("Application Started");
 
   // Log the command line arguments used to start the application
