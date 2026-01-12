@@ -267,6 +267,7 @@ int main(int argc, char* argv[]) {
   auto selectedDevice = getSelectedDevice(audio, config.deviceIndex);
 
   if (config.verbose) {
+    std::cout << "Log file: " << Logger::instance().getLogFilePath() << std::endl;
     if (selectedDevice) {
       std::string chanStr;
       for(auto c : selectedDevice->supportedChannels) {
